@@ -12,8 +12,23 @@
 #include <unordered_map>
 #include <map>
 #include <queue>
+#include <thread>
+#include <mutex>
 
 namespace fs = std::experimental::filesystem::v1;
+
+
+struct Indexer {
+	unsigned long termID = 0;
+	unsigned long linkID = 0;
+	std::string inputDir = "pa1-data";
+	const std::string outputDir = "C:\\Users\\Brandon\\source\\repos\\Query\\Query\\";
+	std::unordered_map <std::string, unsigned long> wordIndexer;
+	std::unordered_map <std::string, unsigned long> linkIndexer;
+	std::queue<std::string> blockQueue;
+};
+
+
 
 
 void storeStringLongMap(const std::unordered_map<std::string, unsigned long>&, std::string);
@@ -26,31 +41,32 @@ std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream&)
 
 void writeOneWordDoc(const std::pair<unsigned long, std::set<unsigned long>>&, std::ofstream&);
 
+std::vector<std::vector<std::string>> getSections(const fs::directory_entry&);
+
+void updateIndex(Indexer&, const std::vector<std::string>&, std::map<unsigned long, std::set<unsigned long>>);
+
+void setSections(std::vector<std::vector<std::string>>&,std::vector<std::string>&&, int, int);
+
+
 
 int main(char* argc, char* argv[]) {
 
-	unsigned long wordID = 0; 
-	unsigned long docID = 0;
+	Indexer index;
 
-	std::unordered_map <std::string, unsigned long> wordIndex; // maps word to number representing word (cat - 1)
-	std::unordered_map <std::string, unsigned long> docIndex; // maps document to number represnenting doc (cat.txt - 1)
-	
-	std::queue<std::string> blockQueue;
 
-	std::string inputDir = "pa1-data";
-	std::string outputDir = "C:\\Users\\Brandon\\source\\repos\\Query\\Query\\";
-	
-	for (const auto& subDir : fs::directory_iterator(inputDir)) { // iterate through sub directories
+	for (const auto& subDir : fs::directory_iterator(index.inputDir)) { // iterate through sub directories
 
-		auto outputPath = outputDir + fs::path(subDir).filename().string(); // create path to store index at later
+		auto outputPath = index.outputDir + fs::path(subDir).filename().string(); // create path to store index at later
 
-		blockQueue.push(outputPath); 
+		auto sections = getSections(subDir);
+
+		index.blockQueue.push(outputPath);
 
 		std::map<unsigned long, std::set<unsigned long>> index; // map wordID to DocumentIDs (1 - 1 2 3 4 5)
 
 		for (const auto& file : fs::directory_iterator(subDir)) { // iterate through all files in sub directory
 
-			auto docName = fs::path(file).string(); // get file name
+			auto docName = fs::path(file).filename().string(); // get file name
 
 			docIndex.emplace(docName, ++docID); // index file
 
@@ -83,7 +99,7 @@ int main(char* argc, char* argv[]) {
 				containsKey = !insertResult.second;
 
 				if (containsKey) {
-					
+
 					auto keyValuePair = insertResult.first; // get key/value pair
 
 					keyValuePair->second.insert(docID); // get set of doc ids
@@ -95,22 +111,22 @@ int main(char* argc, char* argv[]) {
 		}
 
 		storeIndex(index, outputPath);
-
 	}
+
 
 
 	while (true) {
 
-		/*
-		Creates one list by merging two.
-		The new list is added to the queue.
-		The two list used to merge are deleted.
-		One list left in the end.
-		*/
 
-		if (blockQueue.size() <= 1) {
-			break;
-		}
+		Creates one list by merging two.
+			The new list is added to the queue.
+			The two list used to merge are deleted.
+			One list left in the end.
+
+
+			if (blockQueue.size() <= 1) {
+				break;
+			}
 
 		auto filePath1 = blockQueue.front();
 		blockQueue.pop();
@@ -136,7 +152,7 @@ int main(char* argc, char* argv[]) {
 
 	storeStringLongMap(wordIndex, outputDir + "wordIndex.bin");
 	storeStringLongMap(docIndex, outputDir + "docIndex.bin");
-	
+
 
 	std::cin.get();
 
@@ -333,4 +349,52 @@ void writeOneWordDoc(const std::pair<unsigned long, std::set<unsigned long>>& wo
 		outFile.write(reinterpret_cast<const char*>(&id), sizeof(id));
 
 	}
+}
+
+std::vector<std::vector<std::string>> getSections(const fs::directory_entry& dir) {
+
+	std::vector<std::string> fileNamesList;
+
+	std::transform(
+		fs::directory_iterator(dir), fs::directory_iterator(),
+		std::back_inserter(fileNamesList), [](const auto& filePath) {
+		return fs::path(filePath).filename().string(); }
+	);
+
+		int maxThreads = std::thread::hardware_concurrency();
+
+		std::vector<std::vector<std::string>> sections;
+
+		setSections(sections, std::move(fileNamesList),0, maxThreads);
+
+		
+		return sections;
+
+}
+
+void setSections(std::vector<std::vector<std::string>>& sections, std::vector<std::string>&& fileNamesList, int iteration,
+	int maxSections) {
+
+	if (iteration == log(maxSections) / log(2)) {
+		std::vector<std::string> section(std::make_move_iterator(fileNamesList.begin()),
+			std::make_move_iterator(fileNamesList.end()));
+		sections.push_back(std::move(section));
+		return;
+	}
+
+	std::vector<std::string> leftHalf(std::make_move_iterator(fileNamesList.begin()),
+		std::make_move_iterator(fileNamesList.begin() + fileNamesList.size() / 2));
+	std::vector<std::string> rightHalf(std::make_move_iterator(fileNamesList.begin() + fileNamesList.size() / 2),
+		std::make_move_iterator(fileNamesList.end()));
+
+	setSections(sections, std::move(leftHalf), iteration + 1, maxSections);
+	setSections(sections, std::move(rightHalf), iteration + 1, maxSections);
+
+}
+
+
+void updateIndex(Indexer& indexer, const std::vector<std::string>& filePaths,
+	std::map<unsigned long, std::set<unsigned long>> wordDocIndex) {
+
+
 }
