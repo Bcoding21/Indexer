@@ -42,7 +42,7 @@ int main(char* argc, char* argv[]) {
 	
 	for (const auto& subDir : fs::directory_iterator(inputDir)) { // iterate through sub directories
 
-		auto outputPath = outputDir  + fs::path(subDir).filename().string(); // create path to store index at later
+		auto outputPath = outputDir + fs::path(subDir).filename().string(); // create path to store index at later
 
 		blockQueue.push(outputPath); 
 
@@ -98,7 +98,15 @@ int main(char* argc, char* argv[]) {
 
 	}
 
+
 	while (true) {
+
+		/*
+		Creates one list by merging two.
+		The new list is added to the queue.
+		The two list used to merge are deleted.
+		One list left in the end.
+		*/
 
 		if (blockQueue.size() <= 1) {
 			break;
@@ -169,8 +177,6 @@ void storeIndex(const std::map<unsigned long, std::set<unsigned long>>& wordDocM
 
 	std::ofstream outFile(filePath, std::ofstream::binary);
 
-	std::ostream_iterator<unsigned long> stream_iter(outFile);
-
 	if (outFile) {
 		
 		for (const auto& pair : wordDocMap) { // loop through map
@@ -181,11 +187,10 @@ void storeIndex(const std::map<unsigned long, std::set<unsigned long>>& wordDocM
 
 			outFile.write(reinterpret_cast<char*>(&listSize), sizeof(listSize)); // store size
 
-			for (const auto& id : pair.second) { // loop through docIdList
+			std::ostream_iterator<char> out_iter(outFile); // char data type to write in binary
 
-				outFile.write(reinterpret_cast<const char*>(&id), sizeof(id)); // write docId
+			std::copy(pair.second.begin(), pair.second.end(), out_iter); // write to file
 
-			}
 		}
 
 		unsigned int mapSize = wordDocMap.size(); // get size
@@ -222,25 +227,25 @@ std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream& 
 void merge(const std::string& filePath1, const std::string& filePath2, const std::string& filePath3) {
 
 
-	std::ifstream inFile1(filePath1, std::ifstream::binary | std::ifstream::ate);
+	std::ifstream inFile1(filePath1, std::ifstream::binary | std::ifstream::ate); // open in binary. pointer to end of file
 	std::ifstream inFile2(filePath2, std::ifstream::binary | std::ifstream::ate);
 	std::ofstream outFile(filePath3, std::ofstream::binary);
 
-	if ((inFile1 && inFile2) && outFile) {
+	if ((inFile1 && inFile2) && outFile) { // check if open
 
-		int sizeOfInt = sizeof(int);
+		int sizeOfInt = sizeof(int); // get size in bytes
 
-		inFile1.seekg(-sizeOfInt, std::ios::end);
+		inFile1.seekg(-sizeOfInt, std::ios::end); // travel back 4 bytes
 
 		unsigned int firstSize = 0;
 
-		inFile1.read(reinterpret_cast<char*>(&firstSize), sizeof(firstSize));
+		inFile1.read(reinterpret_cast<char*>(&firstSize), sizeof(firstSize)); // read 4 bytes. Size of index stored at last 4.
 
 		inFile1.clear();
 
 		inFile1.seekg(0);
 
-		inFile2.seekg(-sizeOfInt, std::ios::end);
+		inFile2.seekg(-sizeOfInt, std::ios::end); 
 
 		unsigned int secondSize = 0;
 
@@ -258,7 +263,12 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 
 		unsigned int outFileSize = 0;
 
-		while (firstCount < firstSize && secondCount < secondSize) {
+		/* similar to merging sorted list
+		reading file increments file pointer
+		to the start of element
+		*/
+
+		while (firstCount < firstSize && secondCount < secondSize) { 
 
 			++outFileSize;
 
@@ -275,10 +285,10 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 				++secondCount;
 			}
 
-			else {
+			else { // same word but different list of documents. Merge list and store.
 				std::set<unsigned long> combinedSet;
 
-				std::set_union(
+				std::set_union( 
 					pair1.second.begin(), pair1.second.end(),
 					pair2.second.begin(), pair2.second.end(),
 					std::inserter(combinedSet, combinedSet.end()));
