@@ -53,14 +53,13 @@ int main(char* argc, char* argv[]) {
 
 			auto docName = fs::path(file).filename().string(); 
 
-			auto sucess = docIndex.emplace(docName, docID);
-			// returns iterator to inserted key/value (sucess.first)
-			// also returns boolean value (sucess.second)
+			auto success = docIndex.emplace(docName, docID);
+			// returns pair pair.first is key/value
+			// pair.second is bool val denoting insertion sucess
 
-			docID += sucess.second;
-			// increment docID by bool value if new doc seen
+			docID += success.second; 
 
-			unsigned long currDocID = sucess.first->second;
+			unsigned long currDocID = success.first->second;
 
 			std::ifstream fileStream(file); 
 			std::istream_iterator<std::string> start(fileStream), end;
