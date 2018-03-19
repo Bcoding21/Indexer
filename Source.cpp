@@ -1,10 +1,8 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <fstream>
 #include <iterator>
 #include <algorithm>
-#include <forward_list>
 #include <unordered_set>
 #include <set>
 #include <experimental/filesystem>
@@ -12,19 +10,22 @@
 #include <unordered_map>
 #include <map>
 #include <queue>
+#include <deque>
+#include <execution>
 
 namespace fs = std::experimental::filesystem::v1;
 
 
 void storeStringLongMap(const std::unordered_map<std::string, unsigned long>&, std::string);
 
-void storeIndex(const std::map<unsigned long, std::set<unsigned long>>&, std::string);
+void storeIndex(std::map<unsigned long, std::vector<unsigned long>>&, std::string);
 
 void merge(const std::string&, const std::string&, const std::string&);
 
 std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream&);
 
 void writeOneWordDoc(const std::pair<unsigned long, std::set<unsigned long>>&, std::ofstream&);
+
 
 
 int main(char* argc, char* argv[]) {
@@ -40,64 +41,48 @@ int main(char* argc, char* argv[]) {
 	std::string inputDir = "pa1-data";
 	std::string outputDir = "C:\\Users\\Brandon\\source\\repos\\Query\\Query\\";
 	
-	for (const auto& subDir : fs::directory_iterator(inputDir)) { // iterate through sub directories
+	for (const auto& subDir : fs::directory_iterator(inputDir)) { 
 
-		auto outputPath = outputDir + fs::path(subDir).filename().string(); // create path to store index at later
+		auto outputPath = outputDir + fs::path(subDir).filename().string();
 
-		blockQueue.push(outputPath); 
+		blockQueue.push(outputPath);  // store location of file
 
-		std::map<unsigned long, std::set<unsigned long>> index; // map wordID to DocumentIDs (1 - 1 2 3 4 5)
+		std::map<unsigned long, std::vector<unsigned long>> wordDocIndex; // map wordID to DocumentIDs (1 - 1 2 3 4 5)
 
-		for (const auto& file : fs::directory_iterator(subDir)) { // iterate through all files in sub directory
+		for (const auto& file : fs::directory_iterator(subDir)) {
 
-			auto docName = fs::path(file).string(); // get file name
+			auto docName = fs::path(file).filename().string(); 
 
-			docIndex.emplace(docName, ++docID); // index file
+			auto sucess = docIndex.emplace(docName, docID);
+			// returns iterator to inserted key/value (sucess.first)
+			// also returns boolean value (sucess.second)
 
-			std::ifstream fileStream(file); // open file
+			docID += sucess.second;
+			// increment docID by bool value if new doc seen
 
-			std::string word;
+			unsigned long currDocID = sucess.first->second;
 
-			while (fileStream >> word) { // read words until end of file
+			std::ifstream fileStream(file); 
+			std::istream_iterator<std::string> start(fileStream), end;
+			std::vector<std::string> words(start, end);
 
-				auto insertionResult = wordIndex.emplace(word, ++wordID); // attempted to insert word and word ID
+			for (const auto& word: words) { 
 
-				unsigned long currWordID = wordID;
+				auto ok = wordIndex.emplace(word, wordID); 
+				wordID += ok.second; 
 
-				bool containsKey = !insertionResult.second; // if insertion fails key is already inserted
+				unsigned long currWordID = ok.first->second;
 
-				if (containsKey) { // if word already in map 
+				auto set = { docID }; 
+				auto good = wordDocIndex.emplace(currWordID, set); 
 
-					auto keyValuePair = insertionResult.first; // get key/value pair
-
-					currWordID = keyValuePair->second; // set value for id to currWordID
-
-					--wordID; // take away 1 because a new word was not encountered
-
+				if (!good.second) {
+					good.first->second.push_back(currDocID); 
 				}
-
-				auto set = { docID }; // create set of 1 containing current doc id
-
-				auto insertResult = index.emplace(currWordID, set); // attemp to insert
-
-				containsKey = !insertResult.second;
-
-				if (containsKey) {
-					
-					auto keyValuePair = insertResult.first; // get key/value pair
-
-					keyValuePair->second.insert(docID); // get set of doc ids
-
-				}
-
 			}
-
 		}
-
-		storeIndex(index, outputPath);
-
+		storeIndex(wordDocIndex, outputPath);
 	}
-
 
 	while (true) {
 
@@ -165,37 +150,39 @@ void storeStringLongMap(const std::unordered_map<std::string, unsigned long>& do
 
 		});
 
-	}// adfsd
+	}
 	else {
 		std::cout << "Could not create docMap file";
-		return; //
+		return;
 	}
 
 }
 
-void storeIndex(const std::map<unsigned long, std::set<unsigned long>>& wordDocMap, std::string filePath) {
+void storeIndex(std::map<unsigned long, std::vector<unsigned long>>& wordDocMap, std::string filePath) {
 
 	std::ofstream outFile(filePath, std::ofstream::binary);
 
 	if (outFile) {
 		
-		for (const auto& pair : wordDocMap) { // loop through map
+		for (auto& pair : wordDocMap) { 
 
-			outFile.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first)); // write wordID
+			std::sort(std::execution::par_unseq, pair.second.begin(), pair.second.end());
 
-			int listSize = pair.second.size(); // get size of docIdList
+			outFile.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
 
-			outFile.write(reinterpret_cast<char*>(&listSize), sizeof(listSize)); // store size
+			int listSize = pair.second.size(); 
 
-			std::ostream_iterator<char> out_iter(outFile); // char data type to write in binary
+			outFile.write(reinterpret_cast<char*>(&listSize), sizeof(listSize));
 
-			std::copy(pair.second.begin(), pair.second.end(), out_iter); // write to file
+			std::ostream_iterator<char> out_iter(outFile);
+
+			std::copy(pair.second.begin(), pair.second.end(), out_iter); 
 
 		}
 
-		unsigned int mapSize = wordDocMap.size(); // get size
+		unsigned int mapSize = wordDocMap.size(); 
 
-		outFile.write(reinterpret_cast<char*>(&mapSize), sizeof(int)); // store size
+		outFile.write(reinterpret_cast<char*>(&mapSize), sizeof(int)); 
 	}
 }
 
@@ -227,19 +214,19 @@ std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream& 
 void merge(const std::string& filePath1, const std::string& filePath2, const std::string& filePath3) {
 
 
-	std::ifstream inFile1(filePath1, std::ifstream::binary | std::ifstream::ate); // open in binary. pointer to end of file
+	std::ifstream inFile1(filePath1, std::ifstream::binary | std::ifstream::ate); 
 	std::ifstream inFile2(filePath2, std::ifstream::binary | std::ifstream::ate);
 	std::ofstream outFile(filePath3, std::ofstream::binary);
 
-	if ((inFile1 && inFile2) && outFile) { // check if open
+	if ((inFile1 && inFile2) && outFile) { 
 
-		int sizeOfInt = sizeof(int); // get size in bytes
+		int sizeOfInt = sizeof(int);
 
-		inFile1.seekg(-sizeOfInt, std::ios::end); // travel back 4 bytes
+		inFile1.seekg(-sizeOfInt, std::ios::end); 
 
 		unsigned int firstSize = 0;
 
-		inFile1.read(reinterpret_cast<char*>(&firstSize), sizeof(firstSize)); // read 4 bytes. Size of index stored at last 4.
+		inFile1.read(reinterpret_cast<char*>(&firstSize), sizeof(firstSize)); // read last for bytes to get size
 
 		inFile1.clear();
 
@@ -285,7 +272,7 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 				++secondCount;
 			}
 
-			else { // same word but different list of documents. Merge list and store.
+			else { 
 				std::set<unsigned long> combinedSet;
 
 				std::set_union( 
