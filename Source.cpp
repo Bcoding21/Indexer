@@ -28,7 +28,7 @@ void writeTermIndex(const std::unordered_map<std::string, unsigned long>&, std::
 	ids the term occurs in.  (1 - 1,2,3,4,5) (2, 3, 34, 44, 5) (3, 4, 5, 6 ,6)
 	Param 2 - path to write data to
 */
-void writeTermIdIndex(std::map<unsigned long, std::vector<unsigned long>>&, std::string);
+void writeTermIdIndex(std::map<unsigned long, std::set<unsigned long>>&, std::string);
 
 
 /*
@@ -44,14 +44,14 @@ void merge(const std::string&, const std::string&, const std::string&);
 	Param 1 - filestream object used to read a file.
 	Returns - Pair consisting of a term id and a list of document ids.
 */
-std::pair<unsigned long, std::set<unsigned long>> readTermIdEntry(std::ifstream&);
+std::pair<unsigned long, std::vector<unsigned long>> readTermIdEntry(std::ifstream&);
 
 /*
 	Writes one entry to a file in binary.
 	Param 1 - Pair that holds a unique term id and a list of unique document ids
 	Param 2 - ofstream variable used to write to an output.
 */
-void writeTermIdEntry(const std::pair<unsigned long, std::set<unsigned long>>&, std::ofstream&);
+void writeTermIdEntry(const std::pair<unsigned long, std::vector<unsigned long>>&, std::ofstream&);
 
 
 int main(char* argc, char* argv[]) {
@@ -73,7 +73,7 @@ int main(char* argc, char* argv[]) {
 
 		outputPaths.push(outputPath); 
 
-		std::map<unsigned long, std::vector<unsigned long>> termIdIndex; // maps unique term id to list of unique document ids the term occured in
+		std::map<unsigned long, std::set<unsigned long>> termIdIndex; // maps unique term id to list of unique document ids the term occured in
 
 		for (const auto& file : fs::directory_iterator(subDir)) {
 
@@ -101,7 +101,7 @@ int main(char* argc, char* argv[]) {
 				bool containsTermId = !it.second;
 
 				if (containsTermId) {
-					it.first->second.push_back(currDocId); 
+					it.first->second.emplace(currDocId); 
 				}
 			}
 		}
@@ -177,15 +177,13 @@ void writeTermIndex(const std::unordered_map<std::string, unsigned long>& index,
 	}
 }
 
-void writeTermIdIndex(std::map<unsigned long, std::vector<unsigned long>>& termIdIndex, std::string path) {
+void writeTermIdIndex(std::map<unsigned long, std::set<unsigned long>>& termIdIndex, std::string path) {
 
 	std::ofstream stream(path, std::ofstream::binary);
 
 	if (stream.is_open()) {
 		
 		for (auto& entry : termIdIndex) { 
-
-			std::sort(std::execution::par_unseq, entry.second.begin(), entry.second.end());
 
 			stream.write(reinterpret_cast<const char*>(&entry.first), sizeof(entry.first));
 
@@ -205,7 +203,7 @@ void writeTermIdIndex(std::map<unsigned long, std::vector<unsigned long>>& termI
 	}
 }
 
-std::pair<unsigned long, std::set<unsigned long>> readTermIdEntry(std::ifstream& stream) {
+std::pair<unsigned long, std::vector<unsigned long>> readTermIdEntry(std::ifstream& stream) {
 
 	long termId = 0;
 
@@ -215,17 +213,9 @@ std::pair<unsigned long, std::set<unsigned long>> readTermIdEntry(std::ifstream&
 
 	stream.read(reinterpret_cast<char*>(&listSize), sizeof(listSize));
 
-	std::set<unsigned long> docIdSet;
+	std::vector<unsigned long> docIdSet(listSize);
 
-	for (int j = 0; j < listSize; j++) {
-
-		unsigned long docID = 0;
-
-		stream.read(reinterpret_cast<char*>(&docID), sizeof(docID));
-
-		docIdSet.insert(docID);
-
-	}
+	stream.read(reinterpret_cast<char*>(&docIdSet[0]), sizeof(docIdSet[0]) * listSize);
 
 	return std::make_pair(termId, docIdSet);
 }
@@ -262,10 +252,10 @@ void merge(const std::string& path1, const std::string& path2, const std::string
 		inStream2.seekg(0);
 
 		auto entry1 = readTermIdEntry(inStream1);
-		unsigned int i = 1;
+		unsigned int indexOneCount = 1;
 
 		auto entry2 = readTermIdEntry(inStream2);
-		unsigned int j = 1;
+		unsigned int indexTwoCount = 1;
 
 		unsigned int newIndexSize = 0;
 
@@ -273,48 +263,53 @@ void merge(const std::string& path1, const std::string& path2, const std::string
 		reading file increments file pointer
 		*/
 
-		while (i < indexOneSize && j < indexTwoSize) { 
+		while (indexOneCount < indexOneSize && indexTwoCount < indexTwoSize) { 
 
 			++newIndexSize;
 
 			if (entry1.first < entry2.first) {
 				writeTermIdEntry(entry1, outStream);
 				entry1 = readTermIdEntry(inStream1);
-				++i;
+				++indexOneCount;
 			}
 
 			else if (entry1.first > entry2.first) {
 				writeTermIdEntry(entry2, outStream);
 				entry2 = readTermIdEntry(inStream2);
-				++j;
+				++indexTwoCount;
 			}
 
 			else { 
-				std::set<unsigned long> combinedSet;
+				std::vector<unsigned long> combinedList;
 
-				std::set_union( 
+				combinedList.reserve(
+					std::max(entry1.second.size(), entry2.second.size())
+				);
+
+				std::set_union(
 					entry1.second.begin(), entry1.second.end(),
 					entry2.second.begin(), entry2.second.end(),
-					std::inserter(combinedSet, combinedSet.end()));
+					std::back_inserter(combinedList)
+				);
 
-				auto combinedPair = std::make_pair(entry1.first, combinedSet);
+				auto newEntry = std::make_pair(entry1.first, combinedList);
+				writeTermIdEntry(newEntry, outStream);
 
-				writeTermIdEntry(combinedPair, outStream);
 				entry1 = readTermIdEntry(inStream1);
 				entry2 = readTermIdEntry(inStream2);
-				++i;
-				++j;
+				++indexOneCount;
+				++indexTwoCount;
 			}
 
 		}
 
-		while (i++ < indexOneSize) {
+		while (indexOneCount++ < indexOneSize) {
 			writeTermIdEntry(entry1, outStream);
 			entry1 = readTermIdEntry(inStream1);
 			newIndexSize++;
 		}
 
-		while (j++ < indexTwoSize) {
+		while (indexTwoCount++ < indexTwoSize) {
 			writeTermIdEntry(entry2, outStream);
 			entry1 = readTermIdEntry(inStream2);
 			newIndexSize++;
@@ -324,17 +319,13 @@ void merge(const std::string& path1, const std::string& path2, const std::string
 	}
 }
 
-void writeTermIdEntry(const std::pair<unsigned long, std::set<unsigned long>>& wordDoc, std::ofstream& outFile) {
+void writeTermIdEntry(const std::pair<unsigned long, std::vector<unsigned long>>& entry, std::ofstream& stream) {
 
-	outFile.write(reinterpret_cast<const char*>(&wordDoc.first), sizeof(wordDoc.first));
+	stream.write(reinterpret_cast<const char*>(&entry.first), sizeof(entry.first));
 
-	unsigned int setSize = wordDoc.second.size();
+	unsigned int vecSize = entry.second.size();
 
-	outFile.write(reinterpret_cast<char*>(&setSize), sizeof(setSize));
+	stream.write(reinterpret_cast<char*>(&vecSize), sizeof(vecSize));
 
-	for (const auto& id : wordDoc.second) {
-
-		outFile.write(reinterpret_cast<const char*>(&id), sizeof(id));
-
-	}
+	stream.write(reinterpret_cast<const char*>(&entry.second[0]), sizeof(entry.second[0]) * vecSize);
 }
