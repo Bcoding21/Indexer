@@ -15,72 +15,97 @@
 
 namespace fs = std::experimental::filesystem::v1;
 
+/*
+	Writes contents of a term Index to a file binary.
+	Param 1 - map that maps terms to a unique term id.
+	Param 2 - path to write data to.
+*/
+void writeTermIndex(const std::unordered_map<std::string, unsigned long>&, std::string);
 
-void storeStringLongMap(const std::unordered_map<std::string, unsigned long>&, std::string);
+/*
+	Writes contents of term Id index to a file in binary
+	Param 1 - map that maps unique term ids to a list of unique document
+	ids the term occurs in.
+	Param 2 - path to write data to
+*/
+void writeTermIdIndex(std::map<unsigned long, std::vector<unsigned long>>&, std::string);
 
-void storeIndex(std::map<unsigned long, std::vector<unsigned long>>&, std::string);
 
+/*
+	Combines two term id indexes and writes the combined index to a file in binary.
+	Param 1 - path of file where term id Index is stored.
+	Param 2 - path of file where term id Index is stored.
+	Param 3 - desired path of the new index.
+*/
 void merge(const std::string&, const std::string&, const std::string&);
 
-std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream&);
+/*
+	Reads one term id and coressponding list of document ids from a binary file.
+	Param 1 - filestream object used to read a file.
+	Returns - Pair consisting of a term id and a list of document ids.
+*/
+std::pair<unsigned long, std::set<unsigned long>> readTermIdEntry(std::ifstream&);
 
-void writeOneWordDoc(const std::pair<unsigned long, std::set<unsigned long>>&, std::ofstream&);
-
+/*
+	Writes one entry to a file in binary.
+	Param 1 - Pair that holds a unique term id and a list of unique document ids
+	Param 2 - ofstream variable used to write to an output.
+*/
+void writeTermIdEntry(const std::pair<unsigned long, std::set<unsigned long>>&, std::ofstream&);
 
 
 int main(char* argc, char* argv[]) {
 
-	unsigned long wordID = 0; 
-	unsigned long docID = 0;
+	unsigned long termId = 0; 
+	unsigned long docId = 0;
 
-	std::unordered_map <std::string, unsigned long> wordIndex; // maps word to number representing word (cat - 1)
-	std::unordered_map <std::string, unsigned long> docIndex; // maps document to number represnenting doc (cat.txt - 1)
+	std::unordered_map <std::string, unsigned long> termIndex; // maps terms to unique term id
+	std::unordered_map <std::string, unsigned long> docIndex; // maps document to unique document id
 	
-	std::queue<std::string> blockQueue;
+	std::queue<std::string> outputPaths; 
 
-	std::string inputDir = "pa1-data";
+	std::string baseDir = "pa1-data";
 	std::string outputDir = "C:\\Users\\Brandon\\source\\repos\\Query\\Query\\";
 	
-	for (const auto& subDir : fs::directory_iterator(inputDir)) { 
+	for (const auto& subDir : fs::directory_iterator(baseDir)) { 
 
 		auto outputPath = outputDir + fs::path(subDir).filename().string();
 
-		blockQueue.push(outputPath);  // store location of file
+		outputPaths.push(outputPath); 
 
-		std::map<unsigned long, std::vector<unsigned long>> wordDocIndex; // map wordID to DocumentIDs (1 - 1 2 3 4 5)
+		std::map<unsigned long, std::vector<unsigned long>> termIdIndex; // maps unique term id to list of unique document ids the term occured in
 
 		for (const auto& file : fs::directory_iterator(subDir)) {
 
-			auto docName = fs::path(file).filename().string(); 
+			auto docTitle = fs::path(file).filename().string(); 
 
-			auto success = docIndex.emplace(docName, docID);
-			// returns pair pair.first is key/value
-			// pair.second is bool val denoting insertion sucess
+			auto iterator = docIndex.emplace(docTitle, docId); 
 
-			docID += success.second; 
+			docId += iterator.second; // iterator.second is bool denoting if emplacement pass/failed.
 
-			unsigned long currDocID = success.first->second;
+			unsigned long currDocId = iterator.first->second; //iterator.first is key/value pair.
 
-			std::ifstream fileStream(file); 
-			std::istream_iterator<std::string> start(fileStream), end;
-			std::vector<std::string> words(start, end);
+			std::ifstream stream(file); 
+			std::istream_iterator<std::string> start(stream), end;
+			std::vector<std::string> terms(start, end);
 
-			for (const auto& word: words) { 
+			for (const auto& term : terms) { 
 
-				auto ok = wordIndex.emplace(word, wordID); 
-				wordID += ok.second; 
+				auto iterator = termIndex.emplace(term, termId); 
+				termId += iterator.second; 
 
-				unsigned long currWordID = ok.first->second;
+				unsigned long currTermId = iterator.first->second; 
 
-				auto set = { docID }; 
-				auto good = wordDocIndex.emplace(currWordID, set); 
+				auto newDocIdList = { docId }; 
+				auto it = termIdIndex.emplace(currTermId, newDocIdList); 
+				bool containsTermId = !it.second;
 
-				if (!good.second) {
-					good.first->second.push_back(currDocID); 
+				if (containsTermId) {
+					it.first->second.push_back(currDocId); 
 				}
 			}
 		}
-		storeIndex(wordDocIndex, outputPath);
+		writeTermIdIndex(termIdIndex, outputPath);
 	}
 
 	while (true) {
@@ -92,15 +117,15 @@ int main(char* argc, char* argv[]) {
 		One list left in the end.
 		*/
 
-		if (blockQueue.size() <= 1) {
+		if (outputPaths.size() <= 1) {
 			break;
 		}
 
-		auto filePath1 = blockQueue.front();
-		blockQueue.pop();
+		auto filePath1 = outputPaths.front();
+		outputPaths.pop();
 
-		auto filePath2 = blockQueue.front();
-		blockQueue.pop();
+		auto filePath2 = outputPaths.front();
+		outputPaths.pop();
 
 		auto fileName1 = fs::path(filePath1).filename().string();
 
@@ -110,16 +135,16 @@ int main(char* argc, char* argv[]) {
 
 		merge(filePath1, filePath2, mergedFilePath);
 
-		blockQueue.push(mergedFilePath);
+		outputPaths.push(mergedFilePath);
 
 		fs::remove(filePath1);
 		fs::remove(filePath2);
 	}
 
-	std::string indexPath = blockQueue.front();
+	std::string indexPath = outputPaths.front();
 
-	storeStringLongMap(wordIndex, outputDir + "wordIndex.bin");
-	storeStringLongMap(docIndex, outputDir + "docIndex.bin");
+	writeTermIndex(termIndex, outputDir + "wordIndex.bin");
+	writeTermIndex(docIndex, outputDir + "docIndex.bin");
 	
 
 	std::cin.get();
@@ -127,7 +152,7 @@ int main(char* argc, char* argv[]) {
 }
 
 
-void storeStringLongMap(const std::unordered_map<std::string, unsigned long>& docMap, std::string filePath) {
+void writeTermIndex(const std::unordered_map<std::string, unsigned long>& docMap, std::string filePath) {
 
 	std::ofstream outFile(filePath, std::ofstream::binary);
 
@@ -157,7 +182,7 @@ void storeStringLongMap(const std::unordered_map<std::string, unsigned long>& do
 
 }
 
-void storeIndex(std::map<unsigned long, std::vector<unsigned long>>& wordDocMap, std::string filePath) {
+void writeTermIdIndex(std::map<unsigned long, std::vector<unsigned long>>& wordDocMap, std::string filePath) {
 
 	std::ofstream outFile(filePath, std::ofstream::binary);
 
@@ -185,7 +210,7 @@ void storeIndex(std::map<unsigned long, std::vector<unsigned long>>& wordDocMap,
 	}
 }
 
-std::pair<unsigned long, std::set<unsigned long>> readOneWordDoc(std::ifstream& inFile) {
+std::pair<unsigned long, std::set<unsigned long>> readTermIdEntry(std::ifstream& inFile) {
 
 	long wordID = 0;
 
@@ -241,10 +266,10 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 
 		inFile2.seekg(0);
 
-		auto pair1 = readOneWordDoc(inFile1);
+		auto pair1 = readTermIdEntry(inFile1);
 		unsigned int firstCount = 1;
 
-		auto pair2 = readOneWordDoc(inFile2);
+		auto pair2 = readTermIdEntry(inFile2);
 		unsigned int secondCount = 1;
 
 		unsigned int outFileSize = 0;
@@ -260,14 +285,14 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 
 			if (pair1.first < pair2.first) {
 
-				writeOneWordDoc(pair1, outFile);
-				pair1 = readOneWordDoc(inFile1);
+				writeTermIdEntry(pair1, outFile);
+				pair1 = readTermIdEntry(inFile1);
 				++firstCount;
 			}
 
 			else if (pair1.first > pair2.first) {
-				writeOneWordDoc(pair2, outFile);
-				pair1 = readOneWordDoc(inFile2);
+				writeTermIdEntry(pair2, outFile);
+				pair1 = readTermIdEntry(inFile2);
 				++secondCount;
 			}
 
@@ -281,9 +306,9 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 
 				auto combinedPair = std::make_pair(pair1.first, combinedSet);
 
-				writeOneWordDoc(combinedPair, outFile);
-				pair1 = readOneWordDoc(inFile1);
-				pair2 = readOneWordDoc(inFile2);
+				writeTermIdEntry(combinedPair, outFile);
+				pair1 = readTermIdEntry(inFile1);
+				pair2 = readTermIdEntry(inFile2);
 				++firstCount;
 				++secondCount;
 			}
@@ -291,14 +316,14 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 		}
 
 		while (firstCount++ < firstSize) {
-			writeOneWordDoc(pair1, outFile);
-			pair1 = readOneWordDoc(inFile1);
+			writeTermIdEntry(pair1, outFile);
+			pair1 = readTermIdEntry(inFile1);
 			outFileSize++;
 		}
 
 		while (secondCount++ < secondSize) {
-			writeOneWordDoc(pair2, outFile);
-			pair1 = readOneWordDoc(inFile2);
+			writeTermIdEntry(pair2, outFile);
+			pair1 = readTermIdEntry(inFile2);
 			outFileSize++;
 		}
 
@@ -306,7 +331,7 @@ void merge(const std::string& filePath1, const std::string& filePath2, const std
 	}
 }
 
-void writeOneWordDoc(const std::pair<unsigned long, std::set<unsigned long>>& wordDoc, std::ofstream& outFile) {
+void writeTermIdEntry(const std::pair<unsigned long, std::set<unsigned long>>& wordDoc, std::ofstream& outFile) {
 
 	outFile.write(reinterpret_cast<const char*>(&wordDoc.first), sizeof(wordDoc.first));
 
