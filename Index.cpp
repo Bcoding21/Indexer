@@ -8,7 +8,7 @@ void Index::add(unsigned long termId, unsigned long docId) {
 		data.emplace(termId, docList);
 	}
 	else {
-		it->second.emplace(docId);
+		it->second.emplace_back(docId);
 	}
 }
 

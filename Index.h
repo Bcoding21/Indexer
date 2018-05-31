@@ -1,15 +1,15 @@
 #ifndef Index_h
 #define Index_h
 
-#include <map>
-#include <set>
+#include <unordered_map>
+#include <vector>
 #include <fstream>
 
 
 class Index {
 
 private:
-	std::map<unsigned long, std::set<unsigned long>> data;
+	std::unordered_map<unsigned long, std::vector<unsigned long>> data;
 
 public:
 
