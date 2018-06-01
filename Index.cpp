@@ -11,9 +11,3 @@ void Index::add(unsigned long termId, unsigned long docId) {
 		it->second.emplace_back(docId);
 	}
 }
-
-void Index::write(const std::string& path) {
-
-	// TODO
-
-}

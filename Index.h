@@ -15,7 +15,6 @@ public:
 
 	void add(unsigned long, unsigned long);
 
-	void write(const std::string&);
 };
 
 #endif

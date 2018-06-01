@@ -19,8 +19,6 @@ public:
 
 	unsigned long getCurrId() const;
 
-	void write(const std::string&);
-
 };
 
 #endif

@@ -16,7 +16,3 @@ void Dictionary::add(const std::string& key) {
 unsigned long Dictionary::getCurrId() const {
 	return currId;
 }
-
-void Dictionary::write(const std::string& path) {
-	// TODO
-}
