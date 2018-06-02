@@ -5,20 +5,22 @@
 #include <string>
 #include <fstream>
 
-class Dictionary {
+namespace indexer {
 
-private:
-	std::unordered_map<std::string, unsigned long> data;
-	unsigned long counter;
-	unsigned long currId;
+	class Dictionary {
 
-public:
-	Dictionary();
+	private:
+		std::unordered_map<std::string, unsigned long> data;
+		unsigned long counter;
+		unsigned long currId;
 
-	void add(const std::string&);
+	public:
+		Dictionary();
 
-	unsigned long getCurrId() const;
+		void add(const std::string&);
 
-};
+		unsigned long getCurrId() const;
 
+	};
+}
 #endif

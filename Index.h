@@ -5,16 +5,17 @@
 #include <vector>
 #include <fstream>
 
+namespace indexer {
+	class Index {
 
-class Index {
+	private:
+		std::unordered_map<unsigned long, std::vector<unsigned long>> data;
 
-private:
-	std::unordered_map<unsigned long, std::vector<unsigned long>> data;
+	public:
 
-public:
+		void add(unsigned long, unsigned long);
 
-	void add(unsigned long, unsigned long);
-
-};
+	};
+}
 
 #endif

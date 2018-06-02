@@ -1,41 +1,42 @@
-#include "Dictionary.h"
-#include "Index.h"
-#include "IndexUtility.h"
+#include "Indexer.h"
 #include <queue>
 
 int main(char* argc, char* argv[]) {
 
-	Dictionary termDict;
-	Dictionary docDict;
-	std::queue<std::string> outputPaths;
+	fs::path inputDir("Data/");
+	fs::path outputDir("Ouput/");
 
-	std::string inputDir = "Data/";
-	std::string outputDir = "Ouput/";
+	std::queue<fs::path> indexPathsQueue;
+
+	indexer::Dictionary termDict;
+	indexer::Dictionary docDict;
 
 	for (const auto& subDir : fs::directory_iterator(inputDir)) {
 
-		auto path = outputDir + iu::getDocTitle(subDir);
-		outputPaths.push(path);
-
-		Index index;
+		indexer::Index index;
 
 		for (const auto& file : fs::directory_iterator(subDir)) {
 
-			docDict.add(iu::getDocTitle(file));
+			docDict.add(file.path().filename().string());
 
-			std::ifstream stream(file);
+			std::ifstream stream(file.path());
 
 			std::string term;
 
-			while (stream >> term ) {
+			while ( stream >> term ) {
 
 				termDict.add(term);
 
 				index.add(termDict.getCurrId() , docDict.getCurrId());
 			}
 		}
-		index.write(path);
+
+		indexer::writeIndex(index, subDir.path());
+		indexPathsQueue.push(subDir.path());
 	}
+
+	indexer::writeDictionary(termDict, "");
+	indexer::writeDictionary(docDict, "");
 
 	/*
 	Creates one list by merging two.
@@ -45,27 +46,25 @@ int main(char* argc, char* argv[]) {
 	*/
 	while (true) {
 
-		if (outputPaths.size() <= 1) {
+		if (indexPathsQueue.size() <= 1) {
 			break;
 		}
 
-		auto path1 = outputPaths.front();
-		outputPaths.pop();
+		auto path1 = indexPathsQueue.front();
+		indexPathsQueue.pop();
 
-		auto path2 = outputPaths.front();
-		outputPaths.pop();
+		auto path2 = indexPathsQueue.front();
+		indexPathsQueue.pop();
 
-		auto docTitle1 = fs::path(path1).filename().string();
-		auto docTitle2 = fs::path(path2).filename().string();
-		auto newPath = outputDir + docTitle1 + docTitle2;
+		fs::path newPath(outputDir / (path1.filename().string() + path2.filename().string()));
 
-		iu::merge(path1, path2, newPath);
-		outputPaths.push(newPath);
+		indexer::mergeIndexFiles(path1, path2, newPath);
+
+		indexPathsQueue.push(newPath);
 
 		fs::remove(path1);
 		fs::remove(path2);
 	}
-	termDict.write("");
-	docDict.write("");
+
 }
 
