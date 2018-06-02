@@ -2,7 +2,11 @@
 
 
 namespace {
-
+	/*
+		Reads one index entry from index file.
+		@param 1 - ifstream object that reads from file.
+		@return - pair that groups term id to vector of doc ids
+	*/
 	std::pair<unsigned long, std::vector<unsigned long>> readIndexEntry(std::ifstream& stream) {
 
 		long termId = 0;
@@ -22,6 +26,10 @@ namespace {
 }
 
 namespace {
+	/*
+		Reads index size from index file.
+		@param - 1 ifstream object that reads from file.
+	*/
 	int readIndexSize(std::ifstream& stream) {
 		int intSize = sizeof(int);
 		stream.seekg(-intSize, std::ios::end);
@@ -34,6 +42,11 @@ namespace {
 }
 
 namespace {
+	/*
+		Writes index entry to file in binary.
+		@param 1 - pair consisting of term id and vector of document ids
+		@param 2 - ofstream object that writes to file.
+	*/
 	void writeIndexEntry(const std::pair<unsigned long, std::vector<unsigned long>>& entry, std::ofstream& stream) {
 
 		stream.write(reinterpret_cast<const char*>(&entry.first), sizeof(entry.first));
@@ -48,6 +61,12 @@ namespace {
 
 
 namespace {
+	/*
+		Combines two index entries to form one entry.
+		@param 1 - pair that represents first index entry.
+		@param 2 - pair that represents second index entry.
+		@return - pair that represents the union of both entries.
+	*/
 	std::pair<unsigned long, std::vector<unsigned long>> getCombinedEntry(
 		const std::pair<unsigned long, std::vector<unsigned long>>& entry1,
 		const std::pair<unsigned long, std::vector<unsigned long>>& entry2) {
